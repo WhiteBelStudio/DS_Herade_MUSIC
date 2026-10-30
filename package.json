@@ -1,0 +1,24 @@
+{
+  "name": "discord-music-bot",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "@discordjs/voice": "^0.19.2",
+    "@ziplayer/infinity": "^0.0.3",
+    "@ziplayer/plugin": "^1.0.2",
+    "discord.js": "^14.27.0",
+    "dotenv": "^18.0.9",
+    "global-agent": "^4.1.6",
+    "opusscript": "^0.1.1",
+    "undici": "^7.30.1",
+    "wtf_wikipedia": "^10.4.2",
+    "ziplayer": "^1.0.4"
+  }
+}
