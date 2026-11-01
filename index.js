@@ -319,10 +319,10 @@ async function searchMusic(query, requestedBy) {
 function createSearchEmbed(query, tracks, source) {
   const listText = tracks.slice(0, 10).map((track, index) =>
     `**${index + 1}:** ${track.title || 'Без названия'} \`Длина: ${formatDuration(track.duration)}\``
-  ).join('\\n');
+  ).join('\n');
   return new EmbedBuilder()
     .setTitle('🎵 Выберите трек из результатов поиска')
-    .setDescription(`Запрос: **${query}**\\n\\n${listText}`)
+    .setDescription(`Запрос: **${query}**\n\n${listText}`)
     .setColor(0x5865F2)
     .setFooter({ text: `Источник результатов: ${source === 'spotify' ? 'Spotify' : 'YouTube'} • Выберите вариант в меню ниже` });
 }
