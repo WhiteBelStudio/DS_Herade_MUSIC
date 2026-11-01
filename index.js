@@ -193,6 +193,15 @@ manager.on('playerError', (player, error) => {
 });
 
 const commands = [
+  new SlashCommandBuilder()
+    .setName('play')
+    .setDescription('Найти музыку по названию и выбрать трек')
+    .addStringOption(option =>
+      option.setName('query')
+        .setDescription('Название песни или ссылка')
+        .setRequired(true)
+    )
+    .toJSON(),
   new SlashCommandBuilder().setName('info').setDescription('Информация о текущем треке').toJSON(),
   new SlashCommandBuilder().setName('help').setDescription('Список всех команд бота').toJSON(),
 ];
@@ -290,6 +299,34 @@ function createSearchMenu(guildId, tracks) {
   return new ActionRowBuilder().addComponents(menu);
 }
 
+async function searchMusic(query, requestedBy) {
+  const errors = [];
+  for (const sourceName of ['youtube', 'spotify']) {
+    const plugin = manager.plugins.find(item => item.name === sourceName);
+    if (!plugin || typeof plugin.search !== 'function') continue;
+    try {
+      const result = await plugin.search(query, requestedBy);
+      if (result?.tracks?.length) return { tracks: result.tracks, source: sourceName };
+    } catch (error) {
+      errors.push(error);
+      console.warn(`[SEARCH] ${sourceName} search failed:`, error?.message || error);
+    }
+  }
+  if (errors.length) throw errors[0];
+  return { tracks: [], source: null };
+}
+
+function createSearchEmbed(query, tracks, source) {
+  const listText = tracks.slice(0, 10).map((track, index) =>
+    `**${index + 1}:** ${track.title || 'Без названия'} \`Длина: ${formatDuration(track.duration)}\``
+  ).join('\\n');
+  return new EmbedBuilder()
+    .setTitle('🎵 Выберите трек из результатов поиска')
+    .setDescription(`Запрос: **${query}**\\n\\n${listText}`)
+    .setColor(0x5865F2)
+    .setFooter({ text: `Источник результатов: ${source === 'spotify' ? 'Spotify' : 'YouTube'} • Выберите вариант в меню ниже` });
+}
+
 client.on('interactionCreate', async (interaction) => {
   
   if (interaction.isStringSelectMenu() && interaction.customId.startsWith('select_track_')) {
@@ -351,6 +388,51 @@ client.on('interactionCreate', async (interaction) => {
   }
 
   if (interaction.isChatInputCommand()) {
+    if (interaction.commandName === 'play') {
+      const query = interaction.options.getString('query', true).trim();
+      const voiceChannel = interaction.member?.voice?.channel;
+
+      if (interaction.channelId !== REQUIRED_TEXT_CHANNEL_ID) {
+        await interaction.reply({ content: `❌ Используйте канал <#${REQUIRED_TEXT_CHANNEL_ID}> для заказа музыки.`, ephemeral: true });
+        return;
+      }
+      if (!voiceChannel || voiceChannel.id !== REQUIRED_VOICE_CHANNEL_ID) {
+        await interaction.reply({ content: `❌ Сначала зайдите в голосовой канал <#${REQUIRED_VOICE_CHANNEL_ID}>.`, ephemeral: true });
+        return;
+      }
+
+      await interaction.deferReply();
+      try {
+        let player = players.get(interaction.guildId);
+        if (!player) {
+          player = await manager.create(interaction.guildId, {
+            leaveOnEnd: true,
+            userdata: { channel: interaction.channel },
+          });
+          players.set(interaction.guildId, player);
+        }
+        if (!player.connection) await player.connect(voiceChannel);
+
+        const result = await searchMusic(query, interaction.user.id);
+        if (!result.tracks.length) {
+          await interaction.editReply('❌ По этому названию ничего не найдено.');
+          return;
+        }
+
+        searchResults.set(interaction.guildId, result.tracks);
+        logAction(interaction.guild, 'Поиск музыки через /play', interaction.user,
+          `Запрос: **${query}**`, `Найдено вариантов: ${result.tracks.length}; источник: ${result.source}`);
+        await interaction.editReply({
+          embeds: [createSearchEmbed(query, result.tracks, result.source)],
+          components: [createSearchMenu(interaction.guildId, result.tracks)],
+        });
+      } catch (error) {
+        console.error('[PLAY SEARCH]', error);
+        await interaction.editReply('⚠️ Поиск сейчас недоступен. Проверьте сетевое подключение музыкальных источников и попробуйте позже.');
+      }
+      return;
+    }
+
     if (interaction.commandName === 'info') {
       const track = currentTracks.get(interaction.guildId);
       const player = players.get(interaction.guildId);
@@ -376,7 +458,7 @@ client.on('interactionCreate', async (interaction) => {
           '`/info` — информация о текущем треке',
           '',
           '**Музыкальные команды**',
-          '`!play <название или URL>` — найти или включить музыку',
+          '`/play <название>` или `!play <название>` — найти треки и выбрать нужный',
           '`!seek <секунды>` — перемотать текущий трек',
           '`!skip` / `!next` — пропустить трек',
           '`!stop` — остановить музыку и очистить очередь',
@@ -583,33 +665,18 @@ client.on('messageCreate', async (msg) => {
       }
       if (!player.connection) await player.connect(voiceChannel);
 
-      const youtubePlugin = manager.plugins.find(p => p.name === 'youtube');
-      if (!youtubePlugin) return msg.reply('Плагин для поиска не найден.');
-
-      const result = await youtubePlugin.search(query, msg.author.id);
-      if (!result || !result.tracks || result.tracks.length === 0) {
+      const result = await searchMusic(query, msg.author.id);
+      if (!result.tracks.length) {
         return msg.reply('❌ Ничего не найдено.');
       }
 
       searchResults.set(msg.guildId, result.tracks);
-      logAction(msg.guild, 'Поиск музыки', msg.author, `Запрос: **${query}**`, 'Пользователю показано меню выбора.');
-
-      const listText = result.tracks.slice(0, 10).map((t, i) => {
-        const dur = formatDuration(t.duration);
-        return `**${i + 1}:** ${t.title} \`Длина: ${dur}\``;
-      }).join('\n');
-
-      const embed = new EmbedBuilder()
-        .setTitle('⚠️ Выберите трек с помощью меню ниже:')
-        .setDescription(listText)
-        .setColor(0xFFA500)
-        .setFooter({ text: 'Выберите трек в выпадающем списке' });
-
-      const selectRow = createSearchMenu(msg.guildId, result.tracks);
+      logAction(msg.guild, 'Поиск музыки', msg.author,
+        `Запрос: **${query}**`, `Пользователю показано меню выбора; источник: ${result.source}`);
 
       await msg.reply({
-        embeds: [embed],
-        components: [selectRow],
+        embeds: [createSearchEmbed(query, result.tracks, result.source)],
+        components: [createSearchMenu(msg.guildId, result.tracks)],
       });
     } catch (e) {
       if (isDnsLookupError(e)) {
