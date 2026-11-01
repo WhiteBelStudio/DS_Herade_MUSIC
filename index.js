@@ -50,10 +50,11 @@ const client = new Client({
   ],
 });
 
+// SoundCloud временно отключён: @zibot/scdl не может получить client_id
+// и отклоняет инициализацию. Остальные источники запускаются независимо.
 const manager = new PlayerManager({
   plugins: [
     new YouTubePlugin(),
-    new SoundCloudPlugin(),
     new SpotifyPlugin(),
     new InfinityPlugin(),
   ],
