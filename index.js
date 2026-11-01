@@ -1,7 +1,30 @@
 require('dotenv').config();
 
 process.on('uncaughtException', (err) => console.error('Критическая ошибка:', err));
-process.on('unhandledRejection', (reason) => console.error('Необработанный отказ:', reason));
+
+function isDnsLookupError(error) {
+  const seen = new Set();
+  let current = error;
+  while (current && typeof current === 'object' && !seen.has(current)) {
+    seen.add(current);
+    if (
+      current.code === 'ENOTFOUND' ||
+      current.code === 'EAI_AGAIN' ||
+      current.code === 'EAI_FAIL' ||
+      current.syscall === 'getaddrinfo'
+    ) return true;
+    current = current.cause;
+  }
+  return false;
+}
+
+process.on('unhandledRejection', (reason) => {
+  if (isDnsLookupError(reason)) {
+    console.warn('[NETWORK] YouTube или другой внешний источник временно недоступен: ошибка DNS. Бот продолжает работу; запрос можно повторить позже.');
+    return;
+  }
+  console.error('Необработанный отказ:', reason);
+});
 
 const {
   Client, GatewayIntentBits, REST, Routes, SlashCommandBuilder,
@@ -541,8 +564,13 @@ client.on('messageCreate', async (msg) => {
         trackRequesters.set(msg.guildId, msg.author.id);
         logAction(msg.guild, 'Запуск по прямой ссылке', msg.author, `Ссылка: ${query}`, 'Бот начал воспроизведение.');
       } catch (e) {
-        console.error(e);
-        msg.reply('❌ Не удалось найти трек.');
+        if (isDnsLookupError(e)) {
+          console.warn('[NETWORK] Не удалось разрешить домен источника музыки:', e.message);
+          msg.reply('⚠️ Музыкальный источник сейчас недоступен из-за сетевой/DNS-ошибки. Попробуйте позже или используйте другой источник.');
+        } else {
+          console.error(e);
+          msg.reply('❌ Не удалось найти или запустить трек.');
+        }
       }
       return;
     }
@@ -583,8 +611,13 @@ client.on('messageCreate', async (msg) => {
         components: [selectRow],
       });
     } catch (e) {
-      console.error(e);
-      msg.reply('❌ Ошибка при поиске.');
+      if (isDnsLookupError(e)) {
+        console.warn('[NETWORK] Поиск YouTube временно недоступен: ошибка DNS.', e.message);
+        msg.reply('⚠️ YouTube сейчас недоступен из-за сетевой/DNS-ошибки. Бот продолжает работать; повторите запрос позже или отправьте ссылку на другой поддерживаемый источник.');
+      } else {
+        console.error(e);
+        msg.reply('❌ Ошибка при поиске. Попробуйте позже.');
+      }
     }
   }
 });
