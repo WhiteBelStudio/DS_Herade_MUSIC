@@ -34,29 +34,13 @@ npm test
 
 ## Pterodactyl: update from GitHub on every startup
 
-Set the server's working directory to `/home/container` and use this Startup Command:
+Set the server working directory to `/home/container` and use this Startup Command:
 
 ```bash
-bash -lc 'set -euo pipefail
-APP=/home/container/app
-STAGE=/home/container/.music-stage
-ARCHIVE=/home/container/.music-source.tar.gz
-mkdir -p /home/container
-curl -fsSL https://github.com/WhiteBelStudio/DS_Herade_MUSIC/archive/refs/heads/main.tar.gz -o "$ARCHIVE"
-rm -rf "$STAGE"
-mkdir -p "$STAGE"
-tar -xzf "$ARCHIVE" --strip-components=1 -C "$STAGE"
-rm -f "$ARCHIVE"
-if [ -f "$APP/.env" ]; then cp "$APP/.env" "$STAGE/.env"; elif [ -f /home/container/.env ]; then cp /home/container/.env "$STAGE/.env"; fi
-cd "$STAGE"
-npm install --omit=dev
-rm -rf "$APP"
-mv "$STAGE" "$APP"
-cd "$APP"
-npm start'
+bash -lc 'set -euo pipefail; cd /home/container; curl -fsSL https://github.com/WhiteBelStudio/DS_Herade_MUSIC/archive/refs/heads/main.tar.gz -o .music-source.tar.gz; tar -xzf .music-source.tar.gz --strip-components=1; rm -f .music-source.tar.gz; npm install --omit=dev; npm start
 ```
 
-This fetches the latest `main` branch before each start, stages the archive before replacing the app directory, and carries over the existing `.env`. Keep any persistent data outside `/home/container/app`, because the app directory is replaced on startup.
+This downloads the latest `main` source directly into `/home/container` on every startup. Existing files not included in the GitHub archive (including `.env` and `node_modules`) are not removed. Keep secrets in the Pterodactyl `.env` file and never commit them.
 
 ## Notes
 
