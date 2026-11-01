@@ -373,7 +373,7 @@ client.on('interactionCreate', async (interaction) => {
           '`!ping` — проверить задержку бота',
           '',
           'Для заказа музыки используйте настроенный текстовый и голосовой каналы сервера.'
-        ].join('\\n'))
+        ].join('\n'))
         .setFooter({ text: 'Дух Музыки 🕊' });
 
       await interaction.reply({ embeds: [embed], ephemeral: true });
