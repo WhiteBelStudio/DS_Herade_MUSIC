@@ -1,20 +1,7 @@
-const PROXY_URL = 'http://127.0.0.1:3067';
-
-process.env.HTTP_PROXY = PROXY_URL;
-process.env.HTTPS_PROXY = PROXY_URL;
-process.env.GLOBAL_AGENT_HTTP_PROXY = PROXY_URL;
-process.env.GLOBAL_AGENT_HTTPS_PROXY = PROXY_URL;
-
 require('dotenv').config();
 
 process.on('uncaughtException', (err) => console.error('Критическая ошибка:', err));
 process.on('unhandledRejection', (reason) => console.error('Необработанный отказ:', reason));
-
-const { bootstrap } = require('global-agent');
-bootstrap();
-
-const { setGlobalDispatcher, ProxyAgent } = require('undici');
-setGlobalDispatcher(new ProxyAgent(PROXY_URL));
 
 const {
   Client, GatewayIntentBits, REST, Routes, SlashCommandBuilder,
@@ -38,7 +25,6 @@ const client = new Client({
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent,
   ],
-  rest: { agent: new ProxyAgent(PROXY_URL) },
 });
 
 const manager = new PlayerManager({
