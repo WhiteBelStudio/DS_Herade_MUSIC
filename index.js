@@ -20,7 +20,7 @@ function isDnsLookupError(error) {
 
 process.on('unhandledRejection', (reason) => {
   if (isDnsLookupError(reason)) {
-    console.warn('[NETWORK] YouTube или другой внешний источник временно недоступен: ошибка DNS. Бот продолжает работу; запрос можно повторить позже.');
+    console.warn('[NETWORK] Внешний музыкальный источник временно недоступен: ошибка DNS.');
     return;
   }
   console.error('Необработанный отказ:', reason);
@@ -32,7 +32,7 @@ const {
   StringSelectMenuBuilder, StringSelectMenuOptionBuilder, MessageFlags,
 } = require('discord.js');
 const { PlayerManager } = require('ziplayer');
-const { YouTubePlugin, SoundCloudPlugin, SpotifyPlugin } = require('@ziplayer/plugin');
+const { SpotifyPlugin } = require('@ziplayer/plugin');
 const { InfinityPlugin } = require('@ziplayer/infinity');
 const wtf = require('wtf_wikipedia');
 
@@ -50,11 +50,9 @@ const client = new Client({
   ],
 });
 
-// SoundCloud временно отключён: @zibot/scdl не может получить client_id
-// и отклоняет инициализацию. Остальные источники запускаются независимо.
+// YouTube и SoundCloud отключены. Поиск выполняется через Spotify.
 const manager = new PlayerManager({
   plugins: [
-    new YouTubePlugin(),
     new SpotifyPlugin(),
     new InfinityPlugin(),
   ],
@@ -300,20 +298,16 @@ function createSearchMenu(guildId, tracks) {
 }
 
 async function searchMusic(query, requestedBy) {
-  const errors = [];
-  for (const sourceName of ['youtube', 'spotify']) {
-    const plugin = manager.plugins.find(item => item.name === sourceName);
-    if (!plugin || typeof plugin.search !== 'function') continue;
-    try {
-      const result = await plugin.search(query, requestedBy);
-      if (result?.tracks?.length) return { tracks: result.tracks, source: sourceName };
-    } catch (error) {
-      errors.push(error);
-      console.warn(`[SEARCH] ${sourceName} search failed:`, error?.message || error);
-    }
+  const spotify = manager.plugins.find(item => item.name === 'spotify');
+  if (!spotify || typeof spotify.search !== 'function') {
+    throw new Error('Spotify search plugin is not available');
   }
-  if (errors.length) throw errors[0];
-  return { tracks: [], source: null };
+
+  const result = await spotify.search(query, requestedBy);
+  return {
+    tracks: result?.tracks || [],
+    source: 'spotify',
+  };
 }
 
 function createSearchEmbed(query, tracks, source) {
@@ -411,8 +405,8 @@ client.on('interactionCreate', async (interaction) => {
         const dnsError = isDnsLookupError(error);
         await interaction.editReply(
           dnsError
-            ? '⚠️ Музыкальный источник сейчас недоступен из-за ошибки DNS. Попробуйте позже.'
-            : '⚠️ Не удалось выполнить поиск музыки. Проверьте подключение к музыкальным источникам и попробуйте позже.'
+            ? '⚠️ Spotify сейчас недоступен из-за ошибки DNS. Попробуйте позже.'
+            : '⚠️ Не удалось выполнить поиск в Spotify. Попробуйте позже.'
         );
         return;
       }
@@ -653,6 +647,9 @@ client.on('messageCreate', async (msg) => {
     if (!query) return msg.reply('Укажи название или ссылку.');
 
     if (query.startsWith('http://') || query.startsWith('https://')) {
+      if (/^https?:\\/\\/(www\\.)?(youtube\\.com|youtu\\.be)(\\/|$)/i.test(query)) {
+        return msg.reply('❌ YouTube отключён. Используйте ссылку Spotify или поиск по названию.');
+      }
       try {
         if (!player) {
           player = await manager.create(msg.guildId, { leaveOnEnd: true, userdata: { channel: msg.channel } });
@@ -696,8 +693,8 @@ client.on('messageCreate', async (msg) => {
       });
     } catch (e) {
       if (isDnsLookupError(e)) {
-        console.warn('[NETWORK] Поиск YouTube временно недоступен: ошибка DNS.', e.message);
-        msg.reply('⚠️ YouTube сейчас недоступен из-за сетевой/DNS-ошибки. Бот продолжает работать; повторите запрос позже или отправьте ссылку на другой поддерживаемый источник.');
+        console.warn('[NETWORK] Поиск Spotify временно недоступен: ошибка DNS.', e.message);
+        msg.reply('⚠️ Spotify сейчас недоступен из-за сетевой/DNS-ошибки. Повторите запрос позже.');
       } else {
         console.error(e);
         msg.reply('❌ Ошибка при поиске. Попробуйте позже.');
