@@ -647,7 +647,7 @@ client.on('messageCreate', async (msg) => {
     if (!query) return msg.reply('Укажи название или ссылку.');
 
     if (query.startsWith('http://') || query.startsWith('https://')) {
-      if (/^https?:\\/\\/(www\\.)?(youtube\\.com|youtu\\.be)(\\/|$)/i.test(query)) {
+      if (/youtube\.com|youtu\.be/i.test(query)) {
         return msg.reply('❌ YouTube отключён. Используйте ссылку Spotify или поиск по названию.');
       }
       try {
