@@ -29,7 +29,7 @@ process.on('unhandledRejection', (reason) => {
 const {
   Client, GatewayIntentBits, REST, Routes, SlashCommandBuilder,
   PermissionFlagsBits, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle,
-  StringSelectMenuBuilder, StringSelectMenuOptionBuilder,
+  StringSelectMenuBuilder, StringSelectMenuOptionBuilder, MessageFlags,
 } = require('discord.js');
 const { PlayerManager } = require('ziplayer');
 const { YouTubePlugin, SoundCloudPlugin, SpotifyPlugin } = require('@ziplayer/plugin');
@@ -402,6 +402,26 @@ client.on('interactionCreate', async (interaction) => {
       }
 
       await interaction.deferReply();
+      let result;
+      try {
+        // Сначала ищем музыку: сбой Discord Voice не должен маскироваться под ошибку поиска.
+        result = await searchMusic(query, interaction.user.id);
+      } catch (error) {
+        console.error('[PLAY SEARCH]', error);
+        const dnsError = isDnsLookupError(error);
+        await interaction.editReply(
+          dnsError
+            ? '⚠️ Музыкальный источник сейчас недоступен из-за ошибки DNS. Попробуйте позже.'
+            : '⚠️ Не удалось выполнить поиск музыки. Проверьте подключение к музыкальным источникам и попробуйте позже.'
+        );
+        return;
+      }
+
+      if (!result.tracks.length) {
+        await interaction.editReply('❌ По этому названию ничего не найдено.');
+        return;
+      }
+
       try {
         let player = players.get(interaction.guildId);
         if (!player) {
@@ -413,12 +433,6 @@ client.on('interactionCreate', async (interaction) => {
         }
         if (!player.connection) await player.connect(voiceChannel);
 
-        const result = await searchMusic(query, interaction.user.id);
-        if (!result.tracks.length) {
-          await interaction.editReply('❌ По этому названию ничего не найдено.');
-          return;
-        }
-
         searchResults.set(interaction.guildId, result.tracks);
         logAction(interaction.guild, 'Поиск музыки через /play', interaction.user,
           `Запрос: **${query}**`, `Найдено вариантов: ${result.tracks.length}; источник: ${result.source}`);
@@ -427,8 +441,10 @@ client.on('interactionCreate', async (interaction) => {
           components: [createSearchMenu(interaction.guildId, result.tracks)],
         });
       } catch (error) {
-        console.error('[PLAY SEARCH]', error);
-        await interaction.editReply('⚠️ Поиск сейчас недоступен. Проверьте сетевое подключение музыкальных источников и попробуйте позже.');
+        console.error('[PLAY VOICE CONNECTION]', error);
+        await interaction.editReply(
+          '⚠️ Результаты найдены, но бот не смог подключиться к голосовому каналу. Проверьте доступ бота к каналу и сетевые настройки голосового соединения.'
+        );
       }
       return;
     }
