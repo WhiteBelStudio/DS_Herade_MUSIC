@@ -48,10 +48,11 @@ mkdir -p "$STAGE"
 tar -xzf "$ARCHIVE" --strip-components=1 -C "$STAGE"
 rm -f "$ARCHIVE"
 if [ -f "$APP/.env" ]; then cp "$APP/.env" "$STAGE/.env"; fi
+cd "$STAGE"
+npm install --omit=dev
 rm -rf "$APP"
 mv "$STAGE" "$APP"
 cd "$APP"
-npm install --omit=dev
 npm start'
 ```
 
