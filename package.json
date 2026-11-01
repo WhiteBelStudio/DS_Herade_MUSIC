@@ -1,14 +1,16 @@
 {
   "name": "discord-music-bot",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "node index.js",
+    "check": "node --check index.js",
+    "test": "npm run check"
   },
-  "keywords": [],
-  "author": "",
+  "keywords": ["discord", "music", "ziplayer"],
+  "author": "WhiteBelStudio",
   "license": "ISC",
-  "description": "",
+  "description": "DS_Herade_MUSIC Discord music bot",
   "dependencies": {
     "@discordjs/voice": "^0.19.2",
     "@ziplayer/infinity": "^0.0.3",
