@@ -342,11 +342,45 @@ client.on('interactionCreate', async (interaction) => {
 
   if (interaction.isChatInputCommand()) {
     if (interaction.commandName === 'info') {
-      logAction(interaction.guild, 'Запрос /info', interaction.user, '', 'Отправлена информация о треке.');
+      const track = currentTracks.get(interaction.guildId);
+      const player = players.get(interaction.guildId);
+
+      if (!track || !player) {
+        await interaction.reply({ content: 'Сейчас ничего не играет.', ephemeral: true });
+        return;
+      }
+
+      const embed = createTrackEmbed(track, trackRequesters.get(interaction.guildId), player);
+      await interaction.reply({ embeds: [embed], ephemeral: true });
+      logAction(interaction.guild, 'Запрос /info', interaction.user, '', 'Отправлена информация о текущем треке.');
+      return;
     }
+
     if (interaction.commandName === 'help') {
+      const embed = new EmbedBuilder()
+        .setTitle('🎵 Помощь — DS_Herade_MUSIC')
+        .setColor(0x5865F2)
+        .setDescription([
+          '**Slash-команды**',
+          '`/help` — список команд',
+          '`/info` — информация о текущем треке',
+          '',
+          '**Музыкальные команды**',
+          '`!play <название или URL>` — найти или включить музыку',
+          '`!seek <секунды>` — перемотать текущий трек',
+          '`!skip` / `!next` — пропустить трек',
+          '`!stop` — остановить музыку и очистить очередь',
+          '`!ping` — проверить задержку бота',
+          '',
+          'Для заказа музыки используйте настроенный текстовый и голосовой каналы сервера.'
+        ].join('\\n'))
+        .setFooter({ text: 'Дух Музыки 🕊' });
+
+      await interaction.reply({ embeds: [embed], ephemeral: true });
       logAction(interaction.guild, 'Запрос /help', interaction.user, '', 'Отправлен список команд.');
+      return;
     }
+
     return;
   }
 
