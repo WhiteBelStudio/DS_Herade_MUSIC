@@ -749,9 +749,6 @@ client.on('messageCreate', async (msg) => {
     if (!query) return msg.reply('Укажи название или ссылку.');
 
     if (query.startsWith('http://') || query.startsWith('https://')) {
-      if (/youtube\.com|youtu\.be/i.test(query)) {
-        return msg.reply('❌ YouTube отключён. Используйте ссылку Spotify или поиск по названию.');
-      }
       try {
         if (!player) {
           player = await manager.create(msg.guildId, { leaveOnEnd: true, userdata: { channel: msg.channel } });
@@ -795,8 +792,8 @@ client.on('messageCreate', async (msg) => {
       });
     } catch (e) {
       if (isDnsLookupError(e)) {
-        console.warn('[NETWORK] Поиск Spotify временно недоступен: ошибка DNS.', e.message);
-        msg.reply('⚠️ Spotify сейчас недоступен из-за сетевой/DNS-ошибки. Повторите запрос позже.');
+        console.warn('[NETWORK] Поиск музыки временно недоступен: ошибка DNS.', e.message);
+        msg.reply('⚠️ Музыкальный источник сейчас недоступен из-за сетевой/DNS-ошибки. Повторите запрос позже.');
       } else {
         console.error(e);
         msg.reply('❌ Ошибка при поиске. Попробуйте позже.');
