@@ -1,5 +1,100 @@
 require('dotenv').config();
 
+// Резервное DNS-разрешение через DNS-over-HTTPS.
+// Оно используется только если системный dns.lookup завершился ошибкой.
+// Работает при доступе контейнера к HTTPS (TCP 443).
+const dns = require('node:dns');
+const https = require('node:https');
+const systemLookup = dns.lookup.bind(dns);
+
+function dohQuery(hostname, type, resolver) {
+  return new Promise((resolve, reject) => {
+    const req = https.request({
+      hostname: resolver.ip,
+      servername: resolver.servername,
+      port: 443,
+      path: `/dns-query?name=${encodeURIComponent(hostname)}&type=${type}`,
+      method: 'GET',
+      headers: { accept: 'application/dns-json' },
+      timeout: 4500,
+    }, (res) => {
+      let body = '';
+      res.setEncoding('utf8');
+      res.on('data', chunk => { body += chunk; });
+      res.on('end', () => {
+        try {
+          if (res.statusCode !== 200) throw new Error(`DoH HTTP ${res.statusCode}`);
+          const data = JSON.parse(body);
+          if (data.Status !== 0) throw new Error(`DoH DNS status ${data.Status}`);
+          const expectedType = type === 'A' ? 1 : 28;
+          resolve((data.Answer || [])
+            .filter(record => record.type === expectedType)
+            .map(record => record.data)
+            .filter(Boolean));
+        } catch (error) {
+          reject(error);
+        }
+      });
+    });
+    req.on('timeout', () => req.destroy(new Error('DoH timeout')));
+    req.on('error', reject);
+    req.end();
+  });
+}
+
+async function resolveWithDoh(hostname, family) {
+  const resolvers = [
+    { ip: '1.1.1.1', servername: 'cloudflare-dns.com' },
+    { ip: '8.8.8.8', servername: 'dns.google' },
+  ];
+  const types = family === 4 ? ['A'] : family === 6 ? ['AAAA'] : ['A', 'AAAA'];
+  for (const resolver of resolvers) {
+    try {
+      const answers = await Promise.all(types.map(type => dohQuery(hostname, type, resolver)));
+      const records = answers.flatMap((addresses, index) =>
+        addresses.map(address => ({ address, family: types[index] === 'A' ? 4 : 6 }))
+      );
+      if (records.length) return records;
+    } catch (error) {
+      console.warn(`[DNS-HTTPS] ${resolver.servername} lookup failed:`, error.message);
+    }
+  }
+  throw new Error(`DNS-over-HTTPS could not resolve ${hostname}`);
+}
+
+dns.lookup = function lookupWithDoh(hostname, options, callback) {
+  if (typeof options === 'function') {
+    callback = options;
+    options = {};
+  }
+  const opts = typeof options === 'number' ? { family: options } : (options || {});
+  const family = opts.family || 0;
+
+  return systemLookup(hostname, options, (error, address, resolvedFamily) => {
+    if (!error) {
+      callback(null, address, resolvedFamily);
+      return;
+    }
+    if (!['ENOTFOUND', 'EAI_AGAIN', 'EAI_FAIL'].includes(error.code) ||
+        typeof hostname !== 'string' || !hostname || hostname.includes(':')) {
+      callback(error);
+      return;
+    }
+
+    resolveWithDoh(hostname, family).then(records => {
+      if (opts.all) {
+        callback(null, records);
+      } else {
+        const preferred = records.find(record => !family || record.family === family) || records[0];
+        callback(null, preferred.address, preferred.family);
+      }
+    }).catch(dohError => {
+      console.warn(`[DNS] System lookup and HTTPS fallback failed for ${hostname}:`, dohError.message);
+      callback(error);
+    });
+  });
+};
+
 process.on('uncaughtException', (err) => console.error('Критическая ошибка:', err));
 
 function isDnsLookupError(error) {
@@ -32,7 +127,7 @@ const {
   StringSelectMenuBuilder, StringSelectMenuOptionBuilder, MessageFlags,
 } = require('discord.js');
 const { PlayerManager } = require('ziplayer');
-const { SpotifyPlugin } = require('@ziplayer/plugin');
+const { YouTubePlugin, SpotifyPlugin } = require('@ziplayer/plugin');
 const { InfinityPlugin } = require('@ziplayer/infinity');
 const wtf = require('wtf_wikipedia');
 
@@ -50,9 +145,10 @@ const client = new Client({
   ],
 });
 
-// YouTube и SoundCloud отключены. Поиск выполняется через Spotify.
+// YouTube включён; Spotify используется как резервный поиск.
 const manager = new PlayerManager({
   plugins: [
+    new YouTubePlugin(),
     new SpotifyPlugin(),
     new InfinityPlugin(),
   ],
@@ -298,16 +394,22 @@ function createSearchMenu(guildId, tracks) {
 }
 
 async function searchMusic(query, requestedBy) {
-  const spotify = manager.plugins.find(item => item.name === 'spotify');
-  if (!spotify || typeof spotify.search !== 'function') {
-    throw new Error('Spotify search plugin is not available');
+  const errors = [];
+  for (const sourceName of ['youtube', 'spotify']) {
+    const plugin = manager.plugins.find(item => item.name === sourceName);
+    if (!plugin || typeof plugin.search !== 'function') continue;
+    try {
+      const result = await plugin.search(query, requestedBy);
+      if (result?.tracks?.length) {
+        return { tracks: result.tracks, source: sourceName };
+      }
+    } catch (error) {
+      errors.push(error);
+      console.warn(`[SEARCH] ${sourceName} search failed:`, error?.message || error);
+    }
   }
-
-  const result = await spotify.search(query, requestedBy);
-  return {
-    tracks: result?.tracks || [],
-    source: 'spotify',
-  };
+  if (errors.length) throw errors[0];
+  return { tracks: [], source: null };
 }
 
 function createSearchEmbed(query, tracks, source) {
@@ -405,8 +507,8 @@ client.on('interactionCreate', async (interaction) => {
         const dnsError = isDnsLookupError(error);
         await interaction.editReply(
           dnsError
-            ? '⚠️ Spotify сейчас недоступен из-за ошибки DNS. Попробуйте позже.'
-            : '⚠️ Не удалось выполнить поиск в Spotify. Попробуйте позже.'
+            ? '⚠️ Музыкальные источники не ответили даже через резервный DNS. Попробуйте позже.'
+            : '⚠️ Не удалось выполнить поиск музыки. Попробуйте позже.'
         );
         return;
       }
