@@ -336,14 +336,14 @@ client.on('interactionCreate', async (interaction) => {
     const player = players.get(guildId);
     const tracks = searchResults.get(guildId);
     
-    if (!tracks) return interaction.followUp({ content: 'Результаты поиска устарели.', ephemeral: true }).catch(() => {});
+    if (!tracks) return interaction.followUp({ content: 'Результаты поиска устарели.', flags: MessageFlags.Ephemeral }).catch(() => {});
 
     const index = parseInt(interaction.values[0]);
     const selectedTrack = tracks[index];
-    if (!selectedTrack) return interaction.followUp({ content: 'Трек не найден.', ephemeral: true }).catch(() => {});
+    if (!selectedTrack) return interaction.followUp({ content: 'Трек не найден.', flags: MessageFlags.Ephemeral }).catch(() => {});
 
     try {
-      if (!player) return interaction.followUp({ content: 'Бот не в голосовом канале.', ephemeral: true }).catch(() => {});
+      if (!player) return interaction.followUp({ content: 'Бот не в голосовом канале.', flags: MessageFlags.Ephemeral }).catch(() => {});
       
       await player.play(selectedTrack.url, interaction.user.id);
       trackRequesters.set(guildId, interaction.user.id);
@@ -358,16 +358,16 @@ client.on('interactionCreate', async (interaction) => {
       playerMessages.set(guildId, interaction.message);
     } catch (e) {
       console.error('Select error:', e);
-      await interaction.followUp({ content: 'Ошибка при запуске трека.', ephemeral: true }).catch(() => {});
+      await interaction.followUp({ content: 'Ошибка при запуске трека.', flags: MessageFlags.Ephemeral }).catch(() => {});
     }
     return;
   }
 
   if (interaction.isStringSelectMenu() && interaction.customId === 'seek_menu') {
     const player = players.get(interaction.guildId);
-    if (!player) return interaction.reply({ content: 'Ничего не играет.', ephemeral: true });
+    if (!player) return interaction.reply({ content: 'Ничего не играет.', flags: MessageFlags.Ephemeral });
 
-    if (!canControl(interaction)) return interaction.reply({ content: '⛔ Только автор трека или админ.', ephemeral: true });
+    if (!canControl(interaction)) return interaction.reply({ content: '⛔ Только автор трека или админ.', flags: MessageFlags.Ephemeral });
 
     await interaction.deferUpdate();
     const seekMs = parseInt(interaction.values[0]);
@@ -382,7 +382,7 @@ client.on('interactionCreate', async (interaction) => {
         await interaction.editReply({ embeds: [embed], components: createControlComponents(player, track, interaction.guildId) });
       }
     } catch (e) {
-      await interaction.followUp({ content: 'Ошибка перемотки.', ephemeral: true }).catch(() => {});
+      await interaction.followUp({ content: 'Ошибка перемотки.', flags: MessageFlags.Ephemeral }).catch(() => {});
     }
     return;
   }
@@ -393,11 +393,11 @@ client.on('interactionCreate', async (interaction) => {
       const voiceChannel = interaction.member?.voice?.channel;
 
       if (interaction.channelId !== REQUIRED_TEXT_CHANNEL_ID) {
-        await interaction.reply({ content: `❌ Используйте канал <#${REQUIRED_TEXT_CHANNEL_ID}> для заказа музыки.`, ephemeral: true });
+        await interaction.reply({ content: `❌ Используйте канал <#${REQUIRED_TEXT_CHANNEL_ID}> для заказа музыки.`, flags: MessageFlags.Ephemeral });
         return;
       }
       if (!voiceChannel || voiceChannel.id !== REQUIRED_VOICE_CHANNEL_ID) {
-        await interaction.reply({ content: `❌ Сначала зайдите в голосовой канал <#${REQUIRED_VOICE_CHANNEL_ID}>.`, ephemeral: true });
+        await interaction.reply({ content: `❌ Сначала зайдите в голосовой канал <#${REQUIRED_VOICE_CHANNEL_ID}>.`, flags: MessageFlags.Ephemeral });
         return;
       }
 
@@ -454,12 +454,12 @@ client.on('interactionCreate', async (interaction) => {
       const player = players.get(interaction.guildId);
 
       if (!track || !player) {
-        await interaction.reply({ content: 'Сейчас ничего не играет.', ephemeral: true });
+        await interaction.reply({ content: 'Сейчас ничего не играет.', flags: MessageFlags.Ephemeral });
         return;
       }
 
       const embed = createTrackEmbed(track, trackRequesters.get(interaction.guildId), player);
-      await interaction.reply({ embeds: [embed], ephemeral: true });
+      await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
       logAction(interaction.guild, 'Запрос /info', interaction.user, '', 'Отправлена информация о текущем треке.');
       return;
     }
@@ -484,7 +484,7 @@ client.on('interactionCreate', async (interaction) => {
         ].join('\n'))
         .setFooter({ text: 'Дух Музыки 🕊' });
 
-      await interaction.reply({ embeds: [embed], ephemeral: true });
+      await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
       logAction(interaction.guild, 'Запрос /help', interaction.user, '', 'Отправлен список команд.');
       return;
     }
@@ -494,9 +494,9 @@ client.on('interactionCreate', async (interaction) => {
 
   if (interaction.isButton()) {
     const player = players.get(interaction.guildId);
-    if (!player) return interaction.reply({ content: 'Бот ничего не играет.', ephemeral: true });
+    if (!player) return interaction.reply({ content: 'Бот ничего не играет.', flags: MessageFlags.Ephemeral });
     
-    if (!canControl(interaction)) return interaction.reply({ content: '⛔ Управлять может только автор трека или админ.', ephemeral: true });
+    if (!canControl(interaction)) return interaction.reply({ content: '⛔ Управлять может только автор трека или админ.', flags: MessageFlags.Ephemeral });
 
     await interaction.deferUpdate().catch(() => {});
     try {
